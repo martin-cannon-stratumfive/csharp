@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -6,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using k8s.Exceptions;
 using k8s.KubeConfigModels;
+using Newtonsoft.Json;
 
 namespace k8s
 {
@@ -23,6 +25,8 @@ namespace k8s
         ///     Gets CurrentContext
         /// </summary>
         public string CurrentContext { get; private set; }
+
+        public static Func<string, IList<string>, IDictionary<string, string>, string> ShellExecute;
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="KubernetesClientConfiguration" /> from config file
@@ -239,11 +243,45 @@ namespace k8s
                 userCredentialsFound = true;
             }
 
+            if (userDetails.UserCredentials.Exec != null && !string.IsNullOrEmpty(userDetails.UserCredentials.Exec.Command))
+            {
+                // Execute the command, deserialize the result (json for now) and use the token.
+                // inspired by https://github.com/kubernetes/kubernetes/blob/7786bd8c9a99974e2cda31940dd4a1ef0a31c2e5/staging/src/k8s.io/client-go/plugin/pkg/client/auth/exec/exec.go
+                if (ShellExecute == null)
+                    throw new KubeConfigException($"Cannot execute shell command: ShellExecute is unset");
+                var result = ShellExecute(userDetails.UserCredentials.Exec.Command, userDetails.UserCredentials.Exec.Args, userDetails.UserCredentials.Exec.Env);
+                var resp = JsonConvert.DeserializeObject<ExecPluginResponse>(result);
+                if (resp.Status == null)
+                    throw new KubeConfigException($"Exec plugin didn't return a status field");
+                if (string.IsNullOrWhiteSpace(resp.Status.Token))
+                    throw new KubeConfigException($"Exec plugin didn't return a token");
+
+                AccessToken = resp.Status.Token;
+                userCredentialsFound = true;
+            }
+
             if (!userCredentialsFound)
             {
                 throw new KubeConfigException(
                     $"User: {userDetails.Name} does not have appropriate auth credentials in kubeconfig");
             }
+        }
+
+        public class ExecPluginResponse
+        {
+            [JsonProperty(PropertyName = "kind")]
+            public string Kind { get; set; }
+            [JsonProperty(PropertyName = "apiVersion")]
+            public string ApiVersion { get; set; }
+            [JsonProperty(PropertyName = "spec")]
+            public object Spec { get; set; }
+            public class ExecPluginStatus
+            {
+                [JsonProperty(PropertyName = "token")]
+                public string Token { get; set; }
+            }
+            [JsonProperty(PropertyName = "status")]
+            public ExecPluginStatus Status { get; set; }
         }
 
         /// <summary>

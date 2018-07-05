@@ -1,5 +1,6 @@
 namespace k8s.KubeConfigModels
 {
+    using System.Collections.Generic;
     using YamlDotNet.Serialization;
 
     /// <summary>
@@ -20,3 +21,4 @@ namespace k8s.KubeConfigModels
         public string Name { get; set; }
     }
 }
+

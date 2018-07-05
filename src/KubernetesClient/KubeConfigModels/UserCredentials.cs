@@ -80,5 +80,11 @@ namespace k8s.KubeConfigModels
         /// </summary>
         [YamlMember(Alias = "extensions")]
         public IDictionary<string, dynamic> Extensions { get; set; }
+
+        /// <summary>
+        /// Gets or sets the exec command for authenticating the user
+        /// </summary>
+        [YamlMember(Alias = "exec")]
+        public UserExec Exec { get; set; }
     }
 }
